@@ -458,6 +458,13 @@ list_insert_ordered (struct list *list, struct list_elem *elem,
   return list_insert (e, elem);
 }
 
+/*CODE ADDED*/
+//Compares two elements in a list and returns true if list element A is less than b.
+bool list_less_func (const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+    if(a->wake_time <= b->wake_time) return true;
+    else return false;
+}
 /* Iterates through LIST and removes all but the first in each
    set of adjacent elements that are equal according to LESS
    given auxiliary data AUX.  If DUPLICATES is non-null, then the

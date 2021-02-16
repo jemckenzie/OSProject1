@@ -131,9 +131,9 @@ void thread_sleep(int64_t ticks)
   old_level = intr_disable();
   if(current != idle_thread)
   {
-    list_push_back(&sleeping_list, &current->elem);
-    current->status=THREAD_SLEEPING;
     current->wake_time = timer_ticks() + ticks;
+    list_insert_ordered(&sleeping_list, &current->elem);
+    current->status=THREAD_SLEEPING;
     schedule();
   }
   intr_set_level(old_level);
@@ -587,7 +587,7 @@ schedule (void)
     struct thread *t = list_entry(e, struct thread, allelem);
     if(cur_ticks >= t->wake_time)
     {
-      /*This will be commented out as we want to insert them in order to increase efficiency, wake up threads
+      /*This will be commented out as we want to insert them in order to increase efficiency, sort woken up threads
       in order of their wakeup times. */
       list_push_back(&ready_list, &t->elem)
       //Indicate that thread is in ready list.

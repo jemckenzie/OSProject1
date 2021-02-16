@@ -93,6 +93,8 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
+    /* ADDED CODE */
     int64_t wake_time;       /* The number of ticks until the thread should "wake up"(unblock?)
 
 #ifdef USERPROG
