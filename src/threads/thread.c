@@ -28,6 +28,10 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+/*ADDED CODE*/
+/* A list of all sleeping threads */
+static struct list sleeping_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -113,9 +117,29 @@ thread_start (void)
   /* Start preemptive thread scheduling. */
   intr_enable ();
 
-  /* Wait for the idle thread to initialize idle_thread. */
+  /* Wait for the idle thread to initialize idle_thread. */                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
   sema_down (&idle_started);
 }
+
+/* ADDED CODE */
+
+void thread_sleep(int64_t ticks)
+{
+  struct thread *current = thread_current();
+  enum intr_level old_level;
+
+  old_level = intr_disable();
+  if(current != idle_thread)
+  {
+    list_push_back(&sleeping_list, &current->elem);
+    current->status=THREAD_SLEEPING;
+    current->wake_time = timer_ticks() + ticks;
+    schedule();
+  }
+  intr_set_level(old_level);
+}
+
+
 
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
@@ -555,7 +579,28 @@ schedule (void)
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
+  struct list_elem *temp, *e = list_begin(&sleeping_list);
+  int64_t cur_ticks = timer_ticks();
 
+  while(e != list_end(&sleeping_list))
+  {
+    struct thread *t = list_entry(e, struct thread, allelem);
+    if(cur_ticks >= t->wake_time)
+    {
+      /*This will be commented out as we want to insert them in order to increase efficiency, wake up threads
+      in order of their wakeup times. */
+      list_push_back(&ready_list, &t->elem)
+      //Indicate that thread is in ready list.
+      t->status = THREAD_READY;
+      //Store e in temp.
+      temp = e;
+      //e is the next item in the list
+      e = list_next(e);
+      //remove temp thread from sleeping list.
+      list_remove(temp);
+    }
+    else e = list_next(e);
+  }
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));

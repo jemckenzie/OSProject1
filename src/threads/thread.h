@@ -9,6 +9,7 @@
 enum thread_status
   {
     THREAD_RUNNING,     /* Running thread. */
+    THREAD_SLEEP,
     THREAD_READY,       /* Not running but ready to run. */
     THREAD_BLOCKED,     /* Waiting for an event to trigger. */
     THREAD_DYING        /* About to be destroyed. */
@@ -92,6 +93,7 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    int64_t wake_time;       /* The number of ticks until the thread should "wake up"(unblock?)
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
