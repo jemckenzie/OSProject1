@@ -121,24 +121,6 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
-/* ADDED CODE */
-
-void thread_sleep(int64_t ticks)
-{
-  struct thread *current = thread_current();
-  enum intr_level old_level;
-
-  old_level = intr_disable();
-  if(current != idle_thread)
-  {
-    current->wake_time = timer_ticks() + ticks;
-    list_insert_ordered(&sleeping_list, &current->elem);
-    current->status=THREAD_SLEEPING;
-    schedule();
-  }
-  intr_set_level(old_level);
-}
-
 
 
 /* Called by the timer interrupt handler at each timer tick.
@@ -587,8 +569,8 @@ schedule (void)
     struct thread *t = list_entry(e, struct thread, allelem);
     if(cur_ticks >= t->wake_time)
     {
-      /*This will be commented out as we want to insert them in order to increase efficiency, sort woken up threads
-      in order of their wakeup times. */
+      /*We inserted threads into the sleeping list based on order of wake time, so they should be taken out and placed
+      into the ready list in order as well*/
       list_push_back(&ready_list, &t->elem)
       //Indicate that thread is in ready list.
       t->status = THREAD_READY;
@@ -627,3 +609,21 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* ADDED CODE */
+
+void thread_sleep(int64_t ticks)
+{
+  struct thread *current = thread_current();
+  enum intr_level old_level;
+
+  old_level = intr_disable();
+  if(current != idle_thread)
+  {
+    current->wake_time = timer_ticks() + ticks;
+    list_insert_ordered(&sleeping_list, &current->elem);
+    current->status=THREAD_SLEEPING;
+    schedule();
+  }
+  intr_set_level(old_level);
+}
