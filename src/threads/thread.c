@@ -29,7 +29,6 @@ static struct list ready_list;
 static struct list all_list;
 
 /*ADDED CODE*/
-/* A list of all sleeping threads */
 static struct list sleeping_list;
 
 /* Idle thread. */
@@ -75,6 +74,28 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+/*CODE ADDED*/
+//Compares two elements in a list and returns true if list element A is less than b.
+bool compare_priority (const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+  struct thread *t_a = list_entry (a, struct thread, elem);
+  struct thread *t_b = list_entry (b, struct thread, elem);
+
+    if(t_a->priority <= t_b->priority) return true;
+    else return false;
+}
+
+/*CODE ADDED*/
+//Compares two elements in a list and returns true if list element A is less than b.
+bool compare_wake_time (const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+  struct thread *t_a = list_entry (a, struct thread, elem);
+  struct thread *t_b = list_entry (b, struct thread, elem);
+
+    if(t_a->wake_time <= t_b->wake_time) return true;
+    else return false;
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -117,7 +138,7 @@ thread_start (void)
   /* Start preemptive thread scheduling. */
   intr_enable ();
 
-  /* Wait for the idle thread to initialize idle_thread. */                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+  /* Wait for the idle thread to initialize idle_thread. */
   sema_down (&idle_started);
 }
 
@@ -132,14 +153,12 @@ void thread_sleep(int64_t ticks)
   if(current != idle_thread)
   {
     current->wake_time = timer_ticks() + ticks;
-    list_insert_ordered(&sleeping_list, &current->elem);
-    current->status=THREAD_SLEEPING;
+    list_insert_ordered(&sleeping_list, &current->elem,(list_less_func*) &compare_wake_time , NULL);
+    current->status=THREAD_SLEEP;
     schedule();
   }
   intr_set_level(old_level);
 }
-
-
 
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
@@ -587,9 +606,10 @@ schedule (void)
     struct thread *t = list_entry(e, struct thread, allelem);
     if(cur_ticks >= t->wake_time)
     {
-      /*This will be commented out as we want to insert them in order to increase efficiency, sort woken up threads
+      /*This will be commented out as we want to insert them 
+       in order to increase efficiency, sort woken up threads
       in order of their wakeup times. */
-      list_push_back(&ready_list, &t->elem)
+      list_insert_ordered(&ready_list, &t->elem,(list_less_func*) &compare_priority,NULL);
       //Indicate that thread is in ready list.
       t->status = THREAD_READY;
       //Store e in temp.
@@ -601,6 +621,7 @@ schedule (void)
     }
     else e = list_next(e);
   }
+
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
