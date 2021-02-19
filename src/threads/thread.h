@@ -95,7 +95,7 @@ struct thread
     struct list_elem elem;              /* List element. */
 
     /* ADDED CODE */
-    int64_t wake_time;       /* The number of ticks until the thread should "wake up"(unblock?)
+    int64_t wake_time;       /* The number of ticks until the thread should "wake up"(unblock? ) */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

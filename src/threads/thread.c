@@ -75,6 +75,11 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+/* ADDED CODE */
+bool compare_wake_time(const struct list_elem *a, const struct list_elem *b, void *aux);
+
+bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -571,7 +576,7 @@ schedule (void)
     {
       /*We inserted threads into the sleeping list based on order of wake time, so they should be taken out and placed
       into the ready list in order as well*/
-      list_push_back(&ready_list, &t->elem)
+      list_insert_ordered(&ready_list, &t->elem, (list_less_func*) &compare_priority, NULL);
       //Indicate that thread is in ready list.
       t->status = THREAD_READY;
       //Store e in temp.
@@ -621,9 +626,27 @@ void thread_sleep(int64_t ticks)
   if(current != idle_thread)
   {
     current->wake_time = timer_ticks() + ticks;
-    list_insert_ordered(&sleeping_list, &current->elem);
-    current->status=THREAD_SLEEPING;
+    list_insert_ordered(&sleeping_list, &current->elem, (list_less_func*) &compare_wake_time, NULL);
+    current->status=THREAD_SLEEP;
     schedule();
   }
   intr_set_level(old_level);
 }
+
+bool compare_wake_time (const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+struct thread *t_a = list_entry (a, struct thread, elem);
+struct thread *t_b = list_entry(b, struct thread, elem);
+if (t_a->wake_time <= t_b->wake_time) return true;
+else return false;
+}
+
+//Compare the priority of two threads in order to insert them correctly into the ready thread list.
+bool compare_priority (const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+struct thread *t_a = list_entry (a, struct thread, elem);
+struct thread *t_b = list_entry(b, struct thread, elem);
+if (t_a->priority<= t_b->priority) return true;
+else return false;
+}
+
