@@ -582,7 +582,7 @@ schedule (void)
   ASSERT (is_thread (next));
 
 
-/* INITIAL ATTEMPT AT IMPLEMENTATION
+/* PART OF INITIAL ATTEMPT AT IMPLEMENTATION
   //While sleeping list is not empty
   while(!list_empty(&sleeping_list))
   {
