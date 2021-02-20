@@ -68,7 +68,7 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_push_back (&sema->waiters, &thread_current ()->elem);
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem, compare_priority, NULL); //ADDED CODE: changed to list insert order by priority
       thread_block ();
     }
   sema->value--;
@@ -113,11 +113,16 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  if (!list_empty (&sema->waiters))
+  { 
+    list_sort(&sema->waiters, compare_priority, NULL);//ADDED CODE: making sure the list of waiters is ordered by priority
+    thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
+  }
   sema->value++;
   intr_set_level (old_level);
+
+  //ADDED CODE
+  thread_yield();
 }
 
 static void sema_test_helper (void *sema_);
@@ -196,8 +201,29 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  //ADDED CODE
+  enum intr_level old level;
+  old_level = intr_disable();
+
+  //ADDED CODE
+  //if lock has a holder already then set the thread on the waiting list for the lock (<->lock on waiting list for thread) and insert order the current thread donation list element into the list of lock holder's donation list
+  if(lock->holder)
+  {
+    thread_current()->lock_wait = lock;
+
+    list_insert_ordered(&lock->holder->donation_list, &thread_current->donation_list_elem, compare_priority, NULL);
+  }
   sema_down (&lock->semaphore);
+
+  //ADDED CODE
+  //no threads hold the lock so if the lock is already held by a thread (taken care of above) then the other thread will be blocked by sema_down
+  //so we set the the current thread's identifier for if it is waiting on a lock to NULL 
+  thread_current()->lock_wait = NULL;
+
   lock->holder = thread_current ();
+
+  //ADDED CODE
+  intr_set_level(old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -214,9 +240,23 @@ lock_try_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!lock_held_by_current_thread (lock));
 
+  //ADDED CODE
+  enum intr_level old level;
+  old_level = intr_disable();
+
   success = sema_try_down (&lock->semaphore);
   if (success)
+  {
+    //ADDED CODE
+    //since sema_try_down returns successful that means that there is no current lock being held so we set the the current thread's identifier for if it is waiting on a lock to NULL  
+    thread_current()->lock_wait = NULL;
+    
     lock->holder = thread_current ();
+  }
+
+  //ADDED CODE
+  inr_set_level(old_level);
+
   return success;
 }
 
@@ -231,8 +271,56 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  //ADDED CODE
+  enum intr_level old level;
+  old_level = intr_disable();
+
+
   lock->holder = NULL;
+  
+  //ADDED CODE
+  //Releasing the Lock, to do thiswe must itereate through each thread in the donation list and release the lock on the thread that holds it
+  //
+  //
+  struct list_elem *elem;
+  struct thread *t;
+
+  for(e = list_begin(&thread_current()->donation_list); e != list_end(&thread_current()->donation_list); e = list_next(e))
+  {
+    t = list_entry(e, struct thread, donation_list_elem);
+
+    if(t->lock_wait == lock)
+      list_remove(e);
+  }
+  //
+  //
+  // end releasing the lock
+
+  //We have released the lock, so now we must update the threads priority
+  //
+  //
+  struct thread *curr = thread_current(); //current thread
+  struct thread *next; //next thread in the current threads donor list don't initialize yet because we may not have a next thread
+
+  curr->priority = curr->initial_priority;
+
+  //if the current thread's donation list is empty, then there is no new priority to update the current priority
+  if(list_empty(&curr->donation_list))
+    return;
+  
+  //If the above condition does not hold, then we must look at the next thread
+  next = list_entry(list_front(&curr->donation_list), struct thread, donation_list_elem);
+
+  if(next->priority > curr->priority)
+    curr->priority = next->priority;
+  //
+  //
+  //End updating the priority
+  
   sema_up (&lock->semaphore);
+
+  //ADDED CODE
+  intr_set_level(old_level);
 }
 
 /* Returns true if the current thread holds LOCK, false

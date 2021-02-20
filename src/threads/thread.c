@@ -187,6 +187,9 @@ thread_create (const char *name, int priority,
   struct switch_entry_frame *ef;
   struct switch_threads_frame *sf;
   tid_t tid;
+  //ADDED CODE
+  enum intr_level old_level;
+
 
   ASSERT (function != NULL);
 
@@ -198,6 +201,11 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+
+  //ADDED CODE
+  //Do this atomically so intermediate values for the 'stack' 
+  //member cannot be observed.
+  old_level = intr_disable();
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -214,8 +222,19 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+  //ADDED CODE
+  intr_set_level(old_level)
+
   /* Add to run queue. */
   thread_unblock (t);
+  
+  //ADDED CODE
+  old_level = intr_disable ();  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  if(t->priority > thread_current()->priority)
+    thread_yield();
+
+  //ADDED CODE
+  intr_set_level(old_level);
 
   return tid;
 }
@@ -253,7 +272,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, compare_priority, NULL); //ADDED CODE: made list_insert_ordered by priority
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -324,7 +343,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, compare_priority, NULL); //ADDED CODE: changed to insert ordered by priority
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -351,7 +370,76 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  
+  enum intr_level old_level;
+  int old_priority; //the priority of the current thread when this function is called
+  old_level = intr_disable();
+  old_priority = thread_current->priority; //gets the current threads priority
+  
+  thread_current()->initial_priority = new_priority; //give the new priority to initial_priority to update the priority, changed from ->priority to ->initial_priority
+
+  
+  //Updating the priority of the current thread, if need be
+  //
+  //
+  struct thread *curr = thread_current(); //current thread
+  struct thread *next; //next thread in the current threads donor list don't initialize yet because we may not have a next thread
+
+  curr->priority = curr->initial_priority;
+
+  //if the current thread's donation list is empty, then there is no new priority to update the current priority
+  if(list_empty(&curr->donation_list))
+    return;
+  
+  //If the above condition does not hold, then we must look at the next thread
+  next = list_entry(list_front(&curr->donation_list), struct thread, donation_list_elem);
+
+  if(next->priority > curr->priority)
+    curr->priority = next->priority;
+  //
+  //
+  //End updating the priority
+
+
+  //Now that we updated the priority, we must account for if there is a chain of donations
+  if(old_priority < thread_current()->priority)
+  {
+    int chain = 0; //representing how far the chain of donations goes, max is 8
+    curr = thread_current();
+    struct lock *lock;
+    lock = curr->lock_wait;
+
+    while(lock && chain < 8)
+    {
+      chain++;
+
+      //If there is no thread holding the lock then there is no chain
+      if(lock->holder ==NULL)
+        return;
+
+      //If the priority of the lock holder is greater than or equal to the current thread's priority, rethrun
+      if(lock->holder->priority >= curr->priority)
+        return;
+
+      //if the above two conditions do not apply, then we get the current thread priority from the thread holding the lock
+      lock->holder->priority = curr->priority;
+
+      //Finally we put the thread on the lock
+      lock = curr->lock_wait;
+    }
+  }
+
+  //Now we check if we must yield the thread
+  if(!list_empty(&ready_list))
+  {
+    struct list_elem *front = list_front(&ready_list);
+    struct thread *ft = list_entry(front, struct thread, elem);
+
+    if(ft->priority > thread_current()->priority)
+      thread_yield();
+  }
+
+  intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -467,8 +555,6 @@ is_thread (struct thread *t)
 static void
 init_thread (struct thread *t, const char *name, int priority)
 {
-  enum intr_level old_level;
-
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
@@ -480,9 +566,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
-  old_level = intr_disable ();
+  //ADDED CODE
+  t->lock_wait = NULL;
+  list_init(&t->donation_list);
+  t->initial_priority = priority;
+
   list_push_back (&all_list, &t->allelem);
-  intr_set_level (old_level);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

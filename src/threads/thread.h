@@ -96,6 +96,12 @@ struct thread
 
     /* ADDED CODE */
     int64_t wake_time;       /* The number of ticks until the thread should "wake up"(unblock? ) */
+    struct lock *lock_wait;
+    struct list donation_list;
+    struct list_elem donation_list_elem;
+    int initial_priority; //inital priority when first calling fo the threads priority??
+    int active_priority;
+
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
