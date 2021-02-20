@@ -88,14 +88,19 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-    /* ADDED CODE */
+    /* ADDED CODE FOR ALARM CLOCK */
     int64_t wake_time;       /* The number of ticks until the thread should "wake up"(unblock? ) */
+
+    /* ADDED FOR PRIORITY DOJNATION */
+    struct list donor_list;
+    struct list_elem donor_elem;
+    int true_priority;
+    int acting_priority;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
