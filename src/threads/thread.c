@@ -80,6 +80,10 @@ bool compare_wake_time(const struct list_elem *a, const struct list_elem *b, voi
 
 bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
 
+void thread_sleep(int64_t ticks);
+
+void thread_wakeup(void);
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -101,6 +105,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleeping_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -566,31 +571,36 @@ schedule (void)
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
+
+  /* INITIAL ATTEMPT AT IMPLEMENTATION
   struct list_elem *temp, *e = list_begin(&sleeping_list);
   int64_t cur_ticks = timer_ticks();
+  */
 
-  while(e != list_end(&sleeping_list))
-  {
-    struct thread *t = list_entry(e, struct thread, allelem);
-    if(cur_ticks >= t->wake_time)
-    {
-      /*We inserted threads into the sleeping list based on order of wake time, so they should be taken out and placed
-      into the ready list in order as well*/
-      list_insert_ordered(&ready_list, &t->elem, (list_less_func*) &compare_priority, NULL);
-      //Indicate that thread is in ready list.
-      t->status = THREAD_READY;
-      //Store e in temp.
-      temp = e;
-      //e is the next item in the list
-      e = list_next(e);
-      //remove temp thread from sleeping list.
-      list_remove(temp);
-    }
-    else e = list_next(e);
-  }
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
+
+
+/* INITIAL ATTEMPT AT IMPLEMENTATION
+  //While sleeping list is not empty
+  while(!list_empty(&sleeping_list))
+  {
+    //Create a list entry of type thread
+    struct thread *t = list_entry(e, struct thread, allelem);
+    //If we've hit the number of ticks required
+    if(cur_ticks >= t->wake_time)
+    {
+      //Unblock current thread
+      thread_unblock(&t);
+      //Remove head element from sleeping list.
+      struct list_elem *sleeping_list_head = list_head(&sleeping_list);
+      list_remove(&sleeping_list_head);
+    }
+  }
+  */
+
+
 
   if (cur != next)
     prev = switch_threads (cur, next);
@@ -617,22 +627,53 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 /* ADDED CODE */
 
+//Adds current thread's wake time to the sleeping list in order, blocks the thread.
 void thread_sleep(int64_t ticks)
 {
   struct thread *current = thread_current();
   enum intr_level old_level;
 
+  //Disable interrupts
   old_level = intr_disable();
+  //If current thread is not idle, set its wake time, add it to the sleeping list IN ORDER, and block.
   if(current != idle_thread)
   {
     current->wake_time = timer_ticks() + ticks;
-    list_insert_ordered(&sleeping_list, &current->elem, (list_less_func*) &compare_wake_time, NULL);
-    current->status=THREAD_SLEEP;
-    schedule();
+    list_insert_ordered(&sleeping_list, &current->elem, compare_wake_time, NULL);
+    thread_block();
   }
   intr_set_level(old_level);
 }
 
+/*Using this function, somewhat based on Waqee methodology, methodology is to check the sleep list, pop the first element
+if it's ready to wake up(if the thread's wake_time property exceeds the current ticks.)
+*/
+void thread_wakeup()
+{
+  struct list_elem *head_element;
+  struct thread *thread_head_element;
+  //While we have threads that are sleeping.
+  enum intr_level old_level;
+
+  old_level = intr_disable();
+    while(!list_empty(&sleeping_list))
+    {
+      //Pop the head element off the list.
+      head_element = list_front(&sleeping_list);
+      //Take the thread struct from the list element struct
+      thread_head_element = list_entry(head_element, struct thread, elem);
+      //If number of ticks in wake time exceeds the number of timer ticks, we still need to wait longer, do nothing.
+      //The break from the if allows it to exit the while loop as necessary.
+      if(thread_head_element->wake_time > timer_ticks())
+        break;
+      //Take it off the sleeping list.
+      list_remove(head_element);
+      //Unblock the thread and put it on the ready list.
+      thread_unblock(thread_head_element);
+    }
+  intr_set_level(old_level);
+}
+//Compares the wakeup time of two threads.
 bool compare_wake_time (const struct list_elem *a, const struct list_elem *b, void *aux)
 {
 struct thread *t_a = list_entry (a, struct thread, elem);
