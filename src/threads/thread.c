@@ -253,7 +253,11 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
+  /* TAKE THIS OUT, WANT TO INSERT IN ORDER OF PRIORITY.
   list_push_back (&ready_list, &t->elem);
+  */
+  //Insert current thread to go into ready list in order of original priority.
+  list_insert_ordered(&ready_list, &t->elem, compare_priority, NULL)
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -582,7 +586,7 @@ schedule (void)
   ASSERT (is_thread (next));
 
 
-/* INITIAL ATTEMPT AT IMPLEMENTATION
+/* PART OF INITIAL ATTEMPT AT IMPLEMENTATION
   //While sleeping list is not empty
   while(!list_empty(&sleeping_list))
   {
@@ -682,12 +686,12 @@ if (t_a->wake_time <= t_b->wake_time) return true;
 else return false;
 }
 
-//Compare the priority of two threads in order to insert them correctly into the ready thread list.
+//Compare the original priority of two threads in order to insert them correctly into the ready thread list, return true if a has higher or equal priority to b.
 bool compare_priority (const struct list_elem *a, const struct list_elem *b, void *aux)
 {
 struct thread *t_a = list_entry (a, struct thread, elem);
 struct thread *t_b = list_entry(b, struct thread, elem);
-if (t_a->priority<= t_b->priority) return true;
+if (t_a->true_priority >= t_b->true_priority) return true;
 else return false;
 }
 
