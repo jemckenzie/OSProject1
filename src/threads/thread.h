@@ -96,11 +96,11 @@ struct thread
 
     /* ADDED CODE */
     int64_t wake_time;       /* The number of ticks until the thread should "wake up"(unblock? ) */
-    struct lock *lock_wait;
-    struct list donation_list;
-    struct list_elem donation_list_elem;
+    struct lock *lock_wait;   /* the lock the thread is waiting on */
+    struct thread *lock_thread;
+    struct list donation_list; /* the list of threads wanting to donate their priority**/
+    struct list_elem donation_list_elem; /*element referring to a thread in the donation_list*/
     int initial_priority; //inital priority when first calling fo the threads priority??
-    int active_priority;
 
 
 #ifdef USERPROG
@@ -148,5 +148,8 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 void thread_sleep(int64_t);
+
+bool compare_wake_time (const struct list_elem *a, const struct list_elem *b, void *aux);
+bool compare_priority (const struct list_elem *a, const struct list_elem *b, void *aux);
 
 #endif /* threads/thread.h */

@@ -223,13 +223,13 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
   //ADDED CODE
-  intr_set_level(old_level)
+  intr_set_level(old_level);
 
   /* Add to run queue. */
   thread_unblock (t);
   
   //ADDED CODE
-  old_level = intr_disable ();  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  old_level = intr_disable ();
   if(t->priority > thread_current()->priority)
     thread_yield();
 
@@ -272,6 +272,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
+  list_sort(&ready_list,compare_priority, NULL);
   list_insert_ordered (&ready_list, &t->elem, compare_priority, NULL); //ADDED CODE: made list_insert_ordered by priority
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -342,6 +343,7 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
+  list_sort(&ready_list, compare_priority,NULL);
   if (cur != idle_thread) 
     list_insert_ordered (&ready_list, &cur->elem, compare_priority, NULL); //ADDED CODE: changed to insert ordered by priority
   cur->status = THREAD_READY;
@@ -370,32 +372,31 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  //ADDED CODE ALL
-  //Don't need to go through the entire code if the priority is the same.
-  if(new_priority == thread_current()->priority) //need this because if the priority is the same then we do not need to change the priority
-    return;
+  //ADDED CODE
   enum intr_level old_level;
   old_level = intr_disable();
-
-  int old_priority; //the priority of the current thread when this function is called
-  old_priority = thread_current->priority; //gets the current threads priority
   
-  //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! might not want to reset the initial priority, we'll see
-  thread_current()->initial_priority = new_priority; //give the new priority to initial_priority to update the priority, changed from ->priority to ->initial_priority
-  thread_current()->priority = new_priority; //sets the priority of the thread as the new priority
-  
-  //checks to see if we need to update the priority and does so if we do
-  update_priority();
-
-  //If the new priority is greater thann the old priority, then we try to donate. Chain donation can ocur in this
-  if(old_priority < new_priority)
+  //if we do not have threads in the running threads donation list or the new priority (when called for change priority) is greater than the running thread's priority...
+  if(list_empty(&thread_current()->donation_list) || thread_current()->priority < new_priority)
   {
-    donate_priority();
+  thread_current()->initial_priority = new_priority; //allow the priority change for it's initial priority
+  thread_current()->priority = new_priority; //and for the acting priority
   }
+  //otherwise we only set the acting priority so that we can go back to the initial priority for the case of donations
   else
   {
-    //check if we should yield the thread by checking if the next thread in the ready list has a higher priority than the currently running thread. Ready list is already ordered by priority
-    yield_check();
+    thread_current()->initial_priority = new_priority;
+  } 
+
+  //now we check for any possible donations from the ready list which is already ordered by priority
+  if(!list_empty(&ready_list))
+  {
+    struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
+    //if the highest priority thread in the ready list has a higher priority than the currently running thread, we yield the running thread
+    if(t->priority > thread_current()->priority)
+    {
+      thread_yield();
+    }
   }
 
   intr_set_level(old_level);
@@ -529,6 +530,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->lock_wait = NULL;
   list_init(&t->donation_list);
   t->initial_priority = priority;
+  t->lock_thread = NULL;
 
   list_push_back (&all_list, &t->allelem);
 }
@@ -722,86 +724,12 @@ void thread_wakeup()
   intr_set_level(old_level);
 }
 
-
-void update_priority()
-{
-  struct thread *curr = thread_current(); //current thread
-  struct thread *next; //next thread in the current threads donor list don't initialize yet because we may not have a next thread
-
-  //if the current thread's donation list is empty, then there is no new priority to update the current priority
-  if(!list_empty(&curr->donation_list)) //if list is emty then we dont need ot change priority
-  {
-    //If the above condition does not hold, then we must look at the next thread
-    next = list_entry(list_front(&curr->donation_list), struct thread, donation_list_elem);
-
-    if(next->priority > curr->priority)
-      curr->priority = next->priority;
-  }
-  else
-    return;
-} 
-
-//dealing with chain donatin... I guess usually have to check thi
-void donate_priority(void)
-{
-  int chain = 0; //representing how far the chain of donations goes, max is 8
-  struct thread *curr = thread_current();
-  struct lock *lock;
-  lock = curr->lock_wait;
-
-  while(lock != NULL && chain < 8)
-  {
-    
-    //If there is no thread holding the lock then the current thread can just take over the lock
-    if(lock->holder == NULL)
-      return;
- 
-    //If the priority of the current thread is greater than the priority of the lock holder, then we donate
-    if(lock->holder->priority < curr->priority)
-    {
-    //donate priority
-    lock->holder->priority = curr->priority;
-
-    //this because as wego through this loop, which deals with chain donation, we want to look at the new lock holder and the thread the lock is waiting on (the thread of the thread ... that the lock is waiting on)
-    curr = lock->holder; 
-
-    //Finally we look at the thread with the lock the the current thread is waiting on
-    lock = curr->lock_wait;
-    }
-    else
-      return;
-
-    chain++;
-    }
-}
-
-//checks if we need to yield and does so if we do
-void yield_check(void)
-{
-  enum intr_level old_level;
-  old_level = intr_disable();
-
-  if(list_empty(&ready_list))
-  {
-    return; //dont need to donate if there are no more threads ready
-  }
-  else
-  {
-    struct thread *t = list_entry(list_front(&ready_list), struct thread, elem); //the next thread on the list, it should have the largest priority
-
-    if(t->priority > thread_current()->priority) //if the thread at the front of the ready list has a higher priority than the running threads priority, the yield
-      thread_yield();
-  }
-
-  intr_set_level(old_level);
-}
-
 //Compares the wakeup time of two threads.
 bool compare_wake_time (const struct list_elem *a, const struct list_elem *b, void *aux)
 {
 struct thread *t_a = list_entry (a, struct thread, elem);
 struct thread *t_b = list_entry(b, struct thread, elem);
-if (t_a->wake_time <= t_b->wake_time) return true;
+if (t_a->wake_time < t_b->wake_time) return true;
 else return false;
 }
 
@@ -810,7 +738,7 @@ bool compare_priority (const struct list_elem *a, const struct list_elem *b, voi
 {
 struct thread *t_a = list_entry (a, struct thread, elem);
 struct thread *t_b = list_entry(b, struct thread, elem);
-if (t_a->priority<= t_b->priority) return true;
+if (t_a->priority > t_b->priority) return true;
 else return false;
 }
 
