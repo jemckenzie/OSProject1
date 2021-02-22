@@ -217,7 +217,7 @@ lock_acquire (struct lock *lock)
 
     struct thread *t = thread_current();
     int chain = 0; //representing how far the chain of donations goes, max is 8
-    while(t->lock_thread != NULL && chain < 8)
+    while(t->lock_thread != NULL)
     {
       if(t->lock_thread->priority < t->priority)
       {
