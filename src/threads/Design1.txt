@@ -28,6 +28,7 @@ We based some pieces of our solution on various solutions online, these helped u
 functionality of the functions within thread.c.  These solutions include:
 	https://github.com/Waqee/Pintos-Project-1
 	https://github.com/meskuwa/pintos-project-1
+  https://github.com/kinux98/pintos-project-1
 
 We also consulted some online documentation for Pintos, which explains succinctly via Doxygen some of the functionality of the functions within the OS, and may be useful for further projects/other groups:
 	https://jhu-cs318.github.io/pintos-doxygen/html/
@@ -183,14 +184,18 @@ In struct thread(thread.h):
 	
 	int priority;
 	>We use this variable to keep track of a thread's "active" priority, including donations.
+
+  
 	
 	
 
-	
+!!!!!!!!!!!!!I UPDATED
+
 >> B2: Explain the data structure used to track priority donation.
 
 The data structure we used to track priority donation was primarily embedded within the thread struct in the form of a list.  Our donation_list is a list that stores all donors to the thread that was donated to.  This list was sorted in order 
-of the thread's donors' priorities.  We used the lock_thread member to keep track of which thread currently holds the lock, and lock_wait to indicate the lock the thread is waiting upon and keep track of where the lock is currently.
+of the thread's donors' priorities.  We used the lock_wait lock struct to indicate the lock the thread was waiting on and the lock_thread thread struct as the thread that is the holder of lock_wait lock. !!member to keep track of which thread currently holds the lock, and lock_wait to indicate the lock the thread is waiting upon and keep track of where the lock is currently.!!
+The reason for using a different thread struct to keep track of the holder of the lock instead of the *holder pointer inside the lock struct was to keep the stack from over flowing since the each thread has less than 4kB of stack.
 We used the lock_thread member property to iterate through all donor threads to see if priority should be donated to the current lock holder.  The donation_list is iterated upon within a lock release in order to see which thread is the next
 lock holder.  
 
@@ -201,8 +206,9 @@ lock holder.
 >> B3: How do you ensure that the highest priority thread waiting for
 >> a lock, semaphore, or condition variable wakes up first?
 
-We maintain a list of ordered threads in the list_ready list such that highest priorities are taken out first.  We also always re-sort the donation_list in the case that a lock is released or acquired, and thus a thread's 
-highest priority donors should get the lock first upon release.
+We maintain a list of ordered threads in the list_ready list such that highest priorities are taken out first. To maintain the ordering of the donation list, we always re-sort the donation_list 
+in the case that the donation list was used to acquire the highest priority and when the list had a thread put in or taken out such as when he threadmwas to be blocked, unblocked, and lock released or acquired, 
+and thus a thread's highest priority donors, the thread that is at the front of the ready_list, should get the lock first upon release.
 
 
 
@@ -236,4 +242,14 @@ to that of its donor, and finally the lock is released and CPU yielded.
 >> this race?
 
 Setting a thread's priority means we must check its donor list, and make decisions based on what has donated to it if anything.  We use this function to compute the maximum priority and set the thread's priority to be that.
-If the thread has donors, these donors may need to recalculate the priority of the current thread based on their values.  This causes the data we passed in to be outdated
+If the thread has donors, these donors may need to recalculate the priority of the current thread based on their values. With this, there is the possibility thread_set_priority is called to change the the threads priority from outside the donation list.
+If this happens then we have a race condition where we have two change priorities acting on the same thread. We avoid this by disabling the interrupt. We can use a lock to avoid this race condition, but we wul dhave to implement the locks with both the thread and its donor threads,
+as well as locking the new priority in a thread that is not apart of the donation list.
+
+
+
+>> B7: Why did you choose this design?  In what ways is it superior to
+>> another design you considered?
+
+This design allowed us to keep track of the least amount of data structures while keeping with the the proper steps of priority scheduling, inversion and donation. The design intuitively iterates through the threads that are waiting for a lock and the donation threads that are associated with 
+the thread holding a lock. The design makes sure that if anytime there is a need to check for a higher priority to donate, that highest priority in the ready_list is at the front of the list taking away the need to iterate through the entire list to find the highest priority thread. 

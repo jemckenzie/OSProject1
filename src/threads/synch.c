@@ -209,7 +209,7 @@ lock_acquire (struct lock *lock)
   {
     thread_current()->lock_thread = lock->holder; //tried to just ude lock_wait->holder in while loop but cause stack overflow
 
-    //list_insert_ordered(&lock->holder->donation_list, &thread_current()->donation_list_elem, compare_priority, NULL);
+
     list_push_front(&lock->holder->donation_list, &thread_current()->donation_list_elem);
     list_sort(&lock->holder->donation_list, compare_priority, NULL);
 
@@ -217,7 +217,7 @@ lock_acquire (struct lock *lock)
 
     struct thread *t = thread_current();
     int chain = 0; //representing how far the chain of donations goes, max is 8
-    while(t->lock_thread != NULL)
+    while(t->lock_thread != NULL && chain < 8)
     {
       if(t->lock_thread->priority < t->priority)
       {
@@ -260,12 +260,12 @@ lock_try_acquire (struct lock *lock)
   else
   {
     //ADDED CODE
-    //thread_current()->lock_wait->holder = NULL;
+
     thread_current()->lock_thread = lock->holder; //tried to just ude lock_wait->holder in while loop but cause stack overflow
     
     list_push_front(&lock->holder->donation_list, &thread_current()->donation_list_elem);
     list_sort(&lock->holder->donation_list, compare_priority, NULL);
-    //list_insert_ordered(&lock->holder->donation_list, &thread_current()->donation_list_elem, compare_priority, NULL);
+
     thread_current()->lock_wait = lock;
 
     int chain = 0; //representing how far the chain of donations goes, max is 8
