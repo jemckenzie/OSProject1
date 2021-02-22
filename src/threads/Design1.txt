@@ -28,7 +28,7 @@ We based some pieces of our solution on various solutions online, these helped u
 functionality of the functions within thread.c.  These solutions include:
 	https://github.com/Waqee/Pintos-Project-1
 	https://github.com/meskuwa/pintos-project-1
-  https://github.com/kinux98/pintos-project-1
+  	https://github.com/kinux98/pintos-project-1
 
 We also consulted some online documentation for Pintos, which explains succinctly via Doxygen some of the functionality of the functions within the OS, and may be useful for further projects/other groups:
 	https://jhu-cs318.github.io/pintos-doxygen/html/
@@ -186,17 +186,13 @@ In struct thread(thread.h):
 	>We use this variable to keep track of a thread's "active" priority, including donations.
 
   
-	
-	
-
-!!!!!!!!!!!!!I UPDATED
 
 >> B2: Explain the data structure used to track priority donation.
 
 The data structure we used to track priority donation was primarily embedded within the thread struct in the form of a list.  Our donation_list is a list that stores all donors to the thread that was donated to.  This list was sorted in order 
-of the thread's donors' priorities.  We used the lock_wait lock struct to indicate the lock the thread was waiting on and the lock_thread thread struct as the thread that is the holder of lock_wait lock. !!member to keep track of which thread currently holds the lock, and lock_wait to indicate the lock the thread is waiting upon and keep track of where the lock is currently.!!
-The reason for using a different thread struct to keep track of the holder of the lock instead of the *holder pointer inside the lock struct was to keep the stack from over flowing since the each thread has less than 4kB of stack.
-We used the lock_thread member property to iterate through all donor threads to see if priority should be donated to the current lock holder.  The donation_list is iterated upon within a lock release in order to see which thread is the next
+of the thread's donors' priorities.  We used the lock_wait lock struct to indicate the lock the thread was waiting on and the lock_thread thread struct as the thread that is the holder of lock_wait lock. !!member to keep track of which thread currently holds the lock, 
+and lock_wait to indicate the lock the thread is waiting upon and keep track of where the lock is currently.  The reason for using a different thread struct to keep track of the holder of the lock instead of the *holder pointer inside the lock struct was to keep the stack 
+from over flowing since the each thread has less than 4kB of stack. We used the lock_thread member property to iterate through all donor threads to see if priority should be donated to the current lock holder.  The donation_list is iterated upon within a lock release in order to see which thread is the next
 lock holder.  
 
 
@@ -243,7 +239,7 @@ to that of its donor, and finally the lock is released and CPU yielded.
 
 Setting a thread's priority means we must check its donor list, and make decisions based on what has donated to it if anything.  We use this function to compute the maximum priority and set the thread's priority to be that.
 If the thread has donors, these donors may need to recalculate the priority of the current thread based on their values. With this, there is the possibility thread_set_priority is called to change the the threads priority from outside the donation list.
-If this happens then we have a race condition where we have two change priorities acting on the same thread. We avoid this by disabling the interrupt. We can use a lock to avoid this race condition, but we wul dhave to implement the locks with both the thread and its donor threads,
+If this happens then we have a race condition where we have two change priorities acting on the same thread. We avoid this by disabling the interrupt. We can use a lock to avoid this race condition, but we would have to implement the locks with both the thread and its donor threads,
 as well as locking the new priority in a thread that is not apart of the donation list.
 
 
